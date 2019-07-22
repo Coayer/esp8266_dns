@@ -32,12 +32,53 @@ def parsePacket(data):    #gets id, qname, qtype from raw data, checks for unkno
 	return id, qname, qtype
 
 
+def checkResponse(data):
+	if data[7] != 0:
+		return True
+	else:
+		return False
+
+
 def sendResult(id, qname, qtype):    #selects whether query is A or AAAA, constructs packet to return
 	if qtype == b"\x00\x01":
-		rdlendata = resolveA(qname)
+		print("Resolving IPV4 (A) query...")
+		record = CACHED_A.get(qname)
+
+		if record != None:
+			print("Using cached value...")
+			rdlendata = b"\x00\x04" + record
+
+		else:
+			print("Querying upstream server...")
+			upstreamData = upstreamQuery(data)
+
+			if checkResponse(upstreamData):
+				rddata = upstreamData[-4:]
+				CACHED_A[qname] = rddata
+				rdlendata = b"\x00\x04" + rddata
+
+			else:
+				return upstreamData
 
 	elif qtype == b"\x00\x1c":
-		rdlendata = resolveAAAA(qname)
+		print("Resolving IPV6 (AAAA) query...")
+		record = CACHED_AAAA.get(qname)
+
+		if record != None:
+			print("Using cached value...")
+			rdlendata = b"\x00\x10" + record
+
+		else:
+			print("Querying upstream server...")
+			upstreamData = upstreamQuery(data)
+
+			if checkResponse(upstreamData):
+				rddata = upstreamData[-16:]
+				CACHED_A[qname] = rddata
+				rdlendata = b"\x00\x10" + rddata
+
+			else:
+				return upstreamData
 
 	ttl = b"\x00\xd7"
 
@@ -46,39 +87,6 @@ def sendResult(id, qname, qtype):    #selects whether query is A or AAAA, constr
 
 	return packet
 
-
-def resolveA(qname):    #resolving for A queries
-	print("Resolving IPV4 (A) query...")
-	record = CACHED_A.get(qname)
-
-	if record != None:
-		print("Using cached value...")
-		rdlendata = b"\x00\x04" + record
-
-	else:
-		print("Querying upstream server...")
-		rddata = upstreamQuery(data)[-4:]
-		CACHED_A[qname] = rddata
-		rdlendata = b"\x00\x04" + rddata
-
-	return rdlendata
-
-
-def resolveAAAA(qname):    #resolving for AAAA queries
-	print("Resolving IPV6 (AAAA) query...")
-	record = CACHED_AAAA.get(qname)
-
-	if record != None:
-		print("Using cached value...")
-		rdlendata = b"\x00\x10" + record
-
-	else:
-		print("Querying upstream server...")
-		rddata = upstreamQuery(data)[-16:]
-		CACHED_AAAA[qname] = rddata
-		rdlendata = b"\x00\x10" + rddata
-
-	return rdlendata
 
 
 print("Starting...\nSystem byteorder: %s\nUpstream DNS server: %s" % (BYTEORDER, UPSTREAM_IP))

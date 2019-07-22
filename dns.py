@@ -74,7 +74,7 @@ def sendResult(id, qname, qtype):    #selects whether query is A or AAAA, constr
 
 			if checkResponse(upstreamData):
 				rddata = upstreamData[-16:]
-				CACHED_A[qname] = rddata
+				CACHED_AAAA[qname] = rddata
 				rdlendata = b"\x00\x10" + rddata
 
 			else:

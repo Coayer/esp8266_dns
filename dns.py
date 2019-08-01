@@ -1,6 +1,8 @@
 import socket, sys, gc, time
 
 BYTEORDER = sys.byteorder
+SERVER_SOCKET = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+UPSTREAM_SOCKET = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 UPSTREAM_IP = "1.1.1.1"
 UPSTREAM_PORT = 53
 CACHED_A = {}
@@ -8,14 +10,15 @@ CACHED_AAAA = {}
 
 
 def upstreamQuery(data):    #sends data parameter to upstream IP and returns result
-	upstream = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+	result = None
+	UPSTREAM_SOCKET.sendto(data, (UPSTREAM_IP, UPSTREAM_PORT))
 
-	try:
-		upstream.sendto(data, (UPSTREAM_IP, UPSTREAM_PORT))
-		result = upstream.recvfrom(4096)[0]
+	while result == None:
+		try:
+			result = UPSTREAM_SOCKET.recvfrom(1024)[0]
 
-	finally:
-		upstream.close()
+		except OSError:
+			pass
 
 	return result
 
@@ -33,13 +36,13 @@ def parsePacket(data):    #gets id, qname, qtype from raw data, checks for unkno
 
 
 def checkResponse(data):
-	if data[7] != 0:
+	if data[7] == 1:
 		return True
 	else:
 		return False
 
 
-def sendResult(id, qname, qtype):    #selects whether query is A or AAAA, constructs packet to return
+def sendResult(id, qname, qtype, data):    #selects whether query is A or AAAA, constructs packet to return
 	if qtype == b"\x00\x01":
 		print("Resolving IPV4 (A) query...")
 		record = CACHED_A.get(qname)
@@ -88,40 +91,47 @@ def sendResult(id, qname, qtype):    #selects whether query is A or AAAA, constr
 	return packet
 
 
+def main():
+	print("Starting...\nSystem byteorder: %s\nUpstream DNS server: %s" % (BYTEORDER, UPSTREAM_IP))
 
-print("Starting...\nSystem byteorder: %s\nUpstream DNS server: %s" % (BYTEORDER, UPSTREAM_IP))
-serverSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-serverSocket.bind(("", 53))
-flushTime = time.time() + 3600
-gc.collect()
+	try:
+		SERVER_SOCKET.bind(("", 53))
+	except OSError:
+		SERVER_SOCKET.bind(("", 53))
 
-try:
-	while True:
-		data, client = serverSocket.recvfrom(1024)
-		id, qname, qtype = parsePacket(data)
-		print("\n---------------------\nClient: %s\n" % (client[0]))
+	flushTime = time.time() + 3600
+	UPSTREAM_SOCKET.setblocking(0)
 
-		if (id == None and qname == None and qtype == None) or (qtype != b"\x00\x01" and qtype != b"\x00\x1c"):
-			print("Sending upstream...")
-			packet = upstreamQuery(data)
-			serverSocket.sendto(packet, client)
+	try:
+		while True:
+			data, client = SERVER_SOCKET.recvfrom(1024)
+			id, qname, qtype = parsePacket(data)
+			print("\n---------------------\nClient: %s\n" % (client[0]))
 
-		else:
-			packet = sendResult(id, qname, qtype)
-			serverSocket.sendto(packet, client)
+			if (id == None and qname == None and qtype == None) or (qtype != b"\x00\x01" and qtype != b"\x00\x1c"):
+				print("Sending upstream...")
+				packet = upstreamQuery(data)
+				SERVER_SOCKET.sendto(packet, client)
 
-		freeMemory = gc.mem_free()
-		print(freeMemory, "bytes free")
-		currentTime = time.time()
+			else:
+				packet = sendResult(id, qname, qtype, data)
+				SERVER_SOCKET.sendto(packet, client)
 
-		if (currentTime > flushTime) or (freeMemory < 5000):
-			CACHED_A.clear()
-			CACHED_AAAA.clear()
-			gc.collect()
-			flushTime = currentTime + 3600
-			print("Cache flushed at", currentTime)
-			print("\x1bc")
+			freeMemory = gc.mem_free()
+			print(freeMemory, "bytes free")
+			currentTime = time.time()
 
-except:    #KeyboardInterrupt
-	print("\nStopping")
-	serverSocket.close()
+			if (currentTime > flushTime) or (freeMemory < 5000):
+				gc.collect()
+				CACHED_A.clear()
+				CACHED_AAAA.clear()
+				flushTime = currentTime + 3600
+				print("\x1bc")
+				print("Cache flushed at", currentTime)
+
+	except KeyboardInterrupt:
+		print("\nStopping")
+		SERVER_SOCKET.close()
+		UPSTREAM_SOCKET.close()
+
+main()

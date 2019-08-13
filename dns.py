@@ -93,14 +93,10 @@ def sendResult(id, qname, qtype, data):    #selects whether query is A or AAAA, 
 
 def main():
 	print("Starting...\nSystem byteorder: %s\nUpstream DNS server: %s" % (BYTEORDER, UPSTREAM_IP))
-
-	try:
-		SERVER_SOCKET.bind(("", 53))
-	except OSError:
-		SERVER_SOCKET.bind(("", 53))
+	UPSTREAM_SOCKET.setblocking(0)
+	SERVER_SOCKET.bind(("", 53))
 
 	flushTime = time.time() + 3600
-	UPSTREAM_SOCKET.setblocking(0)
 
 	try:
 		while True:
@@ -133,5 +129,9 @@ def main():
 		print("\nStopping")
 		SERVER_SOCKET.close()
 		UPSTREAM_SOCKET.close()
+
+	except Exception:
+		print("### ERROR ###")
+		pass
 
 main()

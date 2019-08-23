@@ -1,7 +1,6 @@
-import socket, sys, gc, time
+import socket, gc, time
 from blocklist import BLOCKLIST
 
-BYTEORDER = sys.byteorder
 SERVER_SOCKET = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 UPSTREAM_SOCKET = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 UPSTREAM_IP = "1.1.1.1"
@@ -112,7 +111,7 @@ def returnResult(id, qname, qtype, data):    #selects whether query is A or AAAA
 
 
 def main():
-	print("Starting...\nSystem byteorder: %s\nUpstream DNS server: %s" % (BYTEORDER, UPSTREAM_IP))
+	print("Starting...\nUpstream DNS server: %s" % UPSTREAM_IP)
 
 	UPSTREAM_SOCKET.setblocking(0)
 	SERVER_SOCKET.bind(("", 53))
